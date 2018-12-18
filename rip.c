@@ -9,7 +9,7 @@ char *pcLocalName[10] = {};//存储本地接口的接口名
 struct in_addr pcLocalMask[10];
 int interCount = 0;
 
-int directConnect(struct in_addr a, struct in_addr b, struct in_addr m)//a naive solution
+int directConnect(struct in_addr a, struct in_addr b, struct in_addr m)
 {
     return (a.s_addr & m.s_addr) == (b.s_addr & m.s_addr);
 }
@@ -110,6 +110,11 @@ void rippacket_Receive()
         }
         printf("Start receive...\n");
         printf("    received %d sized ripPacket from %s\n", recvLength, inet_ntoa(local_addr.sin_addr));
+        if(recvLength > RIP_MAX_PACKET)
+        {
+            printf("What the hell? It's too large\n");
+            continue;
+        }
         /*
         int isFromMe = 0;
         for(int i = 0;i < interCount; i++)
@@ -365,6 +370,7 @@ void response_Handle(struct in_addr stSourceIp)
     printf("        Update my Rip route table!!!\n");
     struct timeval tv;
     gettimeofday(&tv,NULL);
+    int needUpdate = 0;
     for(int i = 0; i < ripReceivePkt->ripEntryCount; i ++)
     {
         int find = 0;
@@ -378,8 +384,13 @@ void response_Handle(struct in_addr stSourceIp)
                 if(his > RIP_INFINITY)// delete this route in Route Table
                 {
                     now->isValid = ROUTE_NOTVALID;
+                    needUpdate = 1;
                 }else if(now->stNexthop.s_addr == ripReceivePkt->RipEntries[i].stNexthop.s_addr)
                 {
+                    if(my != his)
+                    {
+                        needUpdate = 1;
+                    }
                     now->uiMetric = ntohl(his);
                     now->isValid = ROUTE_VALID;
                     if(his == 16)// not useful
@@ -389,6 +400,10 @@ void response_Handle(struct in_addr stSourceIp)
                     now->lastUpdataTime = tv.tv_sec;
                 }else if(my >= his)
                 {
+                    if(my != his || now->stNexthop.s_addr != stSourceIp.s_addr)
+                    {
+                        needUpdate = 1;
+                    }
                     now->uiMetric = ntohl(his);
                     now->stNexthop = stSourceIp;
                     now->isValid = ROUTE_VALID;
@@ -401,8 +416,9 @@ void response_Handle(struct in_addr stSourceIp)
             }
             now = now->pstNext;
         }
-        if(!find)
+        if(!find && ripReceivePkt->RipEntries[i].uiMetric != htonl(RIP_INFINITY))
         {
+            needUpdate = 1;
             now = (TRtEntry *) malloc(sizeof(TRtEntry));
             now->stIpPrefix = ripReceivePkt->RipEntries[i].stAddr;
             now->stNexthop = stSourceIp;
@@ -426,6 +442,12 @@ void response_Handle(struct in_addr stSourceIp)
         printf("nextHop=%16s", inet_ntoa(now->stNexthop));
         printf(" prefixLen=%16s metric=%2d\n", inet_ntoa(now->uiPrefixLen), htonl(now->uiMetric));
         now=now->pstNext;
+    }
+    if(needUpdate)
+    {
+        printf("Update triggered!!! I need to tell my neighbours!!!\n");
+        send_update_to_neighbour();
+
     }
 }
 
@@ -510,26 +532,31 @@ void routeTableDelete()//Delete not valid item
         now = now->pstNext;
     }
 }
+
+void send_update_to_neighbour()
+{
+    for(int i = 0; i < interCount ; i++)
+    {
+        rippacket_Update(pcLocalAddr[i]);
+    }
+    routeTableDelete();
+    printf("    This is my now rip table!\n");
+    TRtEntry *now = g_pstRouteEntry;
+    while(now != NULL)
+    {
+        printf("            ipPrefix=%16s ", inet_ntoa(now->stIpPrefix));
+        printf("nextHop=%16s", inet_ntoa(now->stNexthop));
+        printf(" prefixLen=%16s metric=%2d\n", inet_ntoa(now->uiPrefixLen), htonl(now->uiMetric));
+        now=now->pstNext;
+    }
+}
 void *update_thread(void * arg)
 {
     while(1)
     {
         sleep(UPDATE_INTERVAL);
         printf("It's time to update...\n");
-        for(int i = 0; i < interCount ; i++)
-        {
-            rippacket_Update(pcLocalAddr[i]);
-        }
-        routeTableDelete();
-        printf("    This is my now rip table!\n");
-        TRtEntry *now = g_pstRouteEntry;
-        while(now != NULL)
-        {
-            printf("            ipPrefix=%16s ", inet_ntoa(now->stIpPrefix));
-            printf("nextHop=%16s", inet_ntoa(now->stNexthop));
-            printf(" prefixLen=%16s metric=%2d\n", inet_ntoa(now->uiPrefixLen), htonl(now->uiMetric));
-            now=now->pstNext;
-        }
+        send_update_to_neighbour();
     }
 }
 

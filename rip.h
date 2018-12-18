@@ -88,10 +88,13 @@ void rippacket_Send(struct in_addr stSourceIp, struct in_addr pcLocalAddr);
 void rippacket_Multicast(struct in_addr pcLocalAddr, struct RipPacket *ripPacket);
 void request_Handle(struct in_addr stSourceIp);
 void response_Handle(struct in_addr stSourceIp);
-void rippacket_Update();
+void rippacket_Update(struct in_addr pcLocalAddr);
 void routentry_Insert();
 void localinterf_GetInfo();
 void ripdaemon_Start();
 
+void routeTableDelete();
+void send_update_to_neighbour();
+int directConnect(struct in_addr a, struct in_addr b, struct in_addr m);
 #endif
 
