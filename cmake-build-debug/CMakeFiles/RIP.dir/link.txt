@@ -1,1 +1,0 @@
-/usr/bin/cc -std=c99 -lpthread  -g  -rdynamic CMakeFiles/RIP.dir/rip.c.o  -o RIP 
