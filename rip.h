@@ -81,6 +81,16 @@ struct ip_mreq
     struct in_addr imr_interface;         /*加入或者退出的网络接口IP地址*/
 };
 
+struct selfroute
+{
+    char selfprefixlen;
+    struct in_addr selfprefix;
+    unsigned int selfifindex;
+    struct in_addr selfnexthop;
+    unsigned int cmdnum;
+    char ifname[10];
+};
+
 void route_SendForward(unsigned int uiCmd,TRtEntry *pstRtEntry);
 void requestpkt_Encapsulate();
 void rippacket_Receive();

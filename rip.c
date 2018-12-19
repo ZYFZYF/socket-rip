@@ -430,6 +430,12 @@ void response_Handle(struct in_addr stSourceIp)
             {
                 now->isValid = ROUTE_NOTVALID;
             }
+            for(int i = 0; i < interCount; i ++)
+                if(directConnect(stSourceIp, pcLocalAddr[i], pcLocalMask[i]))
+                {
+                    now->pcIfname = (char *) malloc(sizeof(IF_NAMESIZE));
+                    strcpy(now->pcIfname, (const char *) pcLocalName[i]);
+                }
             route_SendForward(AddRoute,now);
             now->pstNext = g_pstRouteEntry;
             g_pstRouteEntry = now;
@@ -476,6 +482,58 @@ void route_SendForward(unsigned int uiCmd, TRtEntry *pstRtEntry)
     printf("        ipPrefix=%16s ",inet_ntoa(pstRtEntry->stIpPrefix));
     printf("nextHop=%16s", inet_ntoa(pstRtEntry->stNexthop));
     printf(" prefixLen=%16s\n", inet_ntoa(pstRtEntry->uiPrefixLen));
+
+    int sendfd;
+    int sendlen=0;
+    int tcpcount=0;
+    struct sockaddr_in dst_addr;
+    char buf[sizeof(struct selfroute)];
+
+    memset(buf, 0, sizeof(buf));
+    struct selfroute *selfrt;
+    selfrt = (struct selfroute *)&buf;
+    selfrt->selfprefixlen = 24;
+    selfrt->selfprefix	= pstRtEntry->stIpPrefix;
+    selfrt->selfifindex	= if_nametoindex(pstRtEntry->pcIfname);
+    selfrt->selfnexthop	= pstRtEntry->stNexthop;
+    selfrt->cmdnum        = uiCmd;
+
+    memset(&dst_addr, 0, sizeof(struct sockaddr_in));
+    dst_addr.sin_family = AF_INET;
+    dst_addr.sin_port   = htons(800);
+    dst_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    if ((sendfd = socket(AF_INET, SOCK_STREAM,0 )) == -1)
+    {
+        printf("self route sendfd socket error!!\n");
+        exit(-1);
+    }
+
+    while(tcpcount <6)
+    {
+        if(connect(sendfd,(struct sockaddr*)&dst_addr,sizeof(dst_addr))<0)
+        {
+            tcpcount++;
+        }
+        else {
+            break;
+        }
+        sleep(1);
+    }
+    if(tcpcount<6)
+    {
+        sendlen = send(sendfd, buf, sizeof(buf), 0); //struct sockaddr *)&dst_addr, sizeof(struct sockaddr_in));
+        if (sendlen <= 0)
+        {
+            printf("self route sendto() error!!!\n");
+            exit(-1);
+        }
+        if(sendlen >0)
+        {
+            printf("send ok!!!");
+        }
+        sleep(5);
+        close(sendfd);
+    }
 }
 
 void rippacket_Update(struct in_addr pcLocalAddr)
@@ -615,7 +673,9 @@ void routentry_Insert()
         j->pstNext = NULL;
         j->lastUpdataTime = tv.tv_sec;
         j->isValid = ROUTE_VALID;
-        route_SendForward(AddRoute,j);
+        j->pcIfname = (char *) malloc(sizeof(IF_NAMESIZE));
+        strcpy(j->pcIfname, (const char *) pcLocalName[i]);
+        //route_SendForward(AddRoute,j);
         /*
         printf("    %d ipPrefix=%16s ",i, inet_ntoa(j->stIpPrefix));
         printf("nextHop=%16s", inet_ntoa(j->stNexthop));
