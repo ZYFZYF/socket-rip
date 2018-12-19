@@ -294,7 +294,7 @@ void rippacket_Multicast(struct in_addr pcLocalAddr, struct RipPacket * ripPacke
         int recvLength;
         if((recvLength = (int)recvfrom(sendfd, ripPacket, 100, 0 ,(struct sockaddr*)&peer_addr, &addrLength) )< 0)
         {
-            printf("fuck you!\n");
+            printf("test!\n");
         }
         printf("    received %d sized ripPacket from %s\n", recvLength, inet_ntoa(peer_addr.sin_addr));
     }*/
