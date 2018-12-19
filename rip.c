@@ -492,18 +492,21 @@ void rippacket_Update(struct in_addr pcLocalAddr)
         ripSendUpdPkt->ripEntryCount = 0;
         while(now != NULL && ripSendUpdPkt->ripEntryCount < RIP_MAX_ENTRY)
         {
-            if(tv.tv_sec - now->lastUpdataTime > ROUTE_MAX_INTERVAL && now->uiMetric != htonl(1))
+            if(!directConnect(now->stIpPrefix, pcLocalAddr, now->uiPrefixLen))
             {
-                printf("%d %d\n", tv.tv_sec, now->lastUpdataTime);
-                now->isValid = ROUTE_NOTVALID;
+                if(tv.tv_sec - now->lastUpdataTime > ROUTE_MAX_INTERVAL && now->uiMetric != htonl(1))
+                {
+                    printf("%d %d\n", tv.tv_sec, now->lastUpdataTime);
+                    now->isValid = ROUTE_NOTVALID;
+                }
+                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stAddr = now->stIpPrefix;
+                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stNexthop = now->stNexthop;
+                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].uiMetric = (now->isValid == ROUTE_NOTVALID || directConnect(pcLocalAddr, now->stNexthop, now->uiPrefixLen))?htonl(RIP_INFINITY):now->uiMetric;//poison reverse
+                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stPrefixLen = now->uiPrefixLen;
+                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].usFamily = htons(2);
+                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].usTag = 0;
+                ripSendUpdPkt->ripEntryCount ++;
             }
-            ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stAddr = now->stIpPrefix;
-            ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stNexthop = now->stNexthop;
-            ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].uiMetric = (now->isValid == ROUTE_NOTVALID || directConnect(pcLocalAddr, now->stNexthop, now->uiPrefixLen))?htonl(RIP_INFINITY):now->uiMetric;//poison reverse
-            ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stPrefixLen = now->uiPrefixLen;
-            ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].usFamily = htons(2);
-            ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].usTag = 0;
-            ripSendUpdPkt->ripEntryCount ++;
             now = now->pstNext;
         }
         if(ripSendUpdPkt->ripEntryCount)
@@ -518,16 +521,20 @@ void routeTableDelete()//Delete not valid item
     TRtEntry *now = g_pstRouteEntry;
     while(now->isValid == ROUTE_NOTVALID)
     {
+        TRtEntry *tmp = g_pstRouteEntry;
         route_SendForward(DelRoute,g_pstRouteEntry);
         g_pstRouteEntry = now->pstNext;
         now = now->pstNext;
+        free(tmp);
     }
     while(now != NULL)
     {
         while(now->pstNext != NULL && now->pstNext->isValid == ROUTE_NOTVALID)
         {
             route_SendForward(DelRoute,now->pstNext);
+            TRtEntry *tmp = now->pstNext;
             now->pstNext=now->pstNext->pstNext;
+            free(tmp);
         }
         now = now->pstNext;
     }
